@@ -1,0 +1,70 @@
+-- East West University Cafe Management System Database
+-- Created for Database Management Course
+
+CREATE DATABASE IF NOT EXISTS cafe_management;
+USE cafe_management;
+
+-- Users table with roles
+CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    full_name VARCHAR(100) NOT NULL,
+    role ENUM('admin', 'user') DEFAULT 'user',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Items/Menu table
+CREATE TABLE IF NOT EXISTS items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    price DECIMAL(10, 2) NOT NULL,
+    category VARCHAR(50),
+    image VARCHAR(255),
+    is_available BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Orders table
+CREATE TABLE IF NOT EXISTS orders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    total_amount DECIMAL(10, 2) NOT NULL,
+    status ENUM('pending', 'preparing', 'ready', 'completed', 'cancelled') DEFAULT 'pending',
+    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Order items table (many-to-many relationship)
+CREATE TABLE IF NOT EXISTS order_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    order_id INT NOT NULL,
+    item_id INT NOT NULL,
+    quantity INT NOT NULL DEFAULT 1,
+    price DECIMAL(10, 2) NOT NULL,
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+    FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+);
+
+-- Insert default admin user (password: admin123)
+-- Password is hashed using password_hash() in PHP
+INSERT INTO users (username, password, email, full_name, role) VALUES
+('admin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin@ewu.edu.bd', 'Admin User', 'admin');
+
+-- Insert sample items
+INSERT INTO items (name, description, price, category, is_available) VALUES
+('Cappuccino', 'Rich espresso with steamed milk and foam', 120.00, 'Coffee', TRUE),
+('Latte', 'Smooth espresso with steamed milk', 130.00, 'Coffee', TRUE),
+('Black Coffee', 'Classic black coffee', 80.00, 'Coffee', TRUE),
+('Chocolate Cake', 'Delicious chocolate cake slice', 150.00, 'Dessert', TRUE),
+('Chicken Sandwich', 'Grilled chicken sandwich with veggies', 180.00, 'Food', TRUE),
+('French Fries', 'Crispy golden fries', 100.00, 'Food', TRUE),
+('Green Tea', 'Refreshing green tea', 60.00, 'Tea', TRUE),
+('Ice Cream', 'Vanilla ice cream', 90.00, 'Dessert', TRUE);
+
+-- Insert sample user (password: user123)
+INSERT INTO users (username, password, email, full_name, role) VALUES
+('user1', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'user1@ewu.edu.bd', 'Test User', 'user');
+
