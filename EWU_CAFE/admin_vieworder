@@ -1,0 +1,102 @@
+<?php
+$pageTitle = 'Order Details';
+require_once '../includes/header.php';
+require_once '../config/database.php';
+requireAdmin();
+
+$conn = getDBConnection();
+
+if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
+    header('Location: orders.php');
+    exit();
+}
+
+$order_id = $_GET['id'];
+
+// Get order details
+$stmt = $conn->prepare("
+    SELECT o.*, u.full_name, u.username, u.email 
+    FROM orders o 
+    JOIN users u ON o.user_id = u.id 
+    WHERE o.id = ?
+");
+$stmt->bind_param("i", $order_id);
+$stmt->execute();
+$result = $stmt->get_result();
+$order = $result->fetch_assoc();
+
+if (!$order) {
+    header('Location: orders.php');
+    exit();
+}
+
+// Get order items
+$items = $conn->prepare("
+    SELECT oi.*, i.name, i.description 
+    FROM order_items oi 
+    JOIN items i ON oi.item_id = i.id 
+    WHERE oi.order_id = ?
+");
+$items->bind_param("i", $order_id);
+$items->execute();
+$order_items = $items->get_result();
+?>
+<div class="card">
+    <h2 class="card-title">Order Details #<?php echo $order['id']; ?></h2>
+    
+    <div style="margin-bottom: 20px;">
+        <h3>Customer Information</h3>
+        <p><strong>Name:</strong> <?php echo htmlspecialchars($order['full_name']); ?></p>
+        <p><strong>Username:</strong> <?php echo htmlspecialchars($order['username']); ?></p>
+        <p><strong>Email:</strong> <?php echo htmlspecialchars($order['email']); ?></p>
+    </div>
+    
+    <div style="margin-bottom: 20px;">
+        <h3>Order Information</h3>
+        <p><strong>Status:</strong> <span style="padding: 5px 10px; border-radius: 4px; background-color: #f39c12; color: white;"><?php echo ucfirst($order['status']); ?></span></p>
+        <p><strong>Order Date:</strong> <?php echo date('Y-m-d H:i:s', strtotime($order['order_date'])); ?></p>
+        <p><strong>Total Amount:</strong> ৳<?php echo number_format($order['total_amount'], 2); ?></p>
+    </div>
+    
+    <h3>Order Items</h3>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Description</th>
+                    <th>Quantity</th>
+                    <th>Price</th>
+                    <th>Subtotal</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if ($order_items->num_rows > 0): ?>
+                    <?php while ($item = $order_items->fetch_assoc()): ?>
+                        <tr>
+                            <td><?php echo htmlspecialchars($item['name']); ?></td>
+                            <td><?php echo htmlspecialchars($item['description']); ?></td>
+                            <td><?php echo $item['quantity']; ?></td>
+                            <td>৳<?php echo number_format($item['price'], 2); ?></td>
+                            <td>৳<?php echo number_format($item['price'] * $item['quantity'], 2); ?></td>
+                        </tr>
+                    <?php endwhile; ?>
+                <?php else: ?>
+                    <tr>
+                        <td colspan="5" style="text-align: center;">No items found.</td>
+                    </tr>
+                <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+    
+    <div style="margin-top: 20px;">
+        <a href="orders.php" class="btn btn-primary">Back to Orders</a>
+    </div>
+</div>
+
+<?php
+$conn->close();
+require_once '../includes/footer.php';
+?>
+
