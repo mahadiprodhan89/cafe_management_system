@@ -1,0 +1,156 @@
+<?php
+$pageTitle = 'Menu';
+require_once '../includes/header.php';
+require_once '../config/database.php';
+requireLogin();
+
+$conn = getDBConnection();
+$message = '';
+
+// Handle add to cart (we'll use session-based cart)
+if (isset($_POST['add_to_cart'])) {
+    if (!isset($_SESSION['cart'])) {
+        $_SESSION['cart'] = [];
+    }
+    
+    $item_id = $_POST['item_id'];
+    $quantity = isset($_POST['quantity']) ? (int)$_POST['quantity'] : 1;
+    
+    // Get item details
+    $stmt = $conn->prepare("SELECT * FROM items WHERE id = ? AND is_available = 1");
+    $stmt->bind_param("i", $item_id);
+    $stmt->execute();
+    $item = $stmt->get_result()->fetch_assoc();
+    
+    if ($item) {
+        if (isset($_SESSION['cart'][$item_id])) {
+            $_SESSION['cart'][$item_id]['quantity'] += $quantity;
+        } else {
+            $_SESSION['cart'][$item_id] = [
+                'name' => $item['name'],
+                'price' => $item['price'],
+                'quantity' => $quantity
+            ];
+        }
+        $message = '<div class="alert alert-success">Item added to cart!</div>';
+    }
+    $stmt->close();
+}
+
+// Handle search
+$search = isset($_GET['search']) ? trim($_GET['search']) : '';
+$category_filter = isset($_GET['category']) ? trim($_GET['category']) : '';
+
+// Build query for available items
+$query = "SELECT * FROM items WHERE is_available = 1";
+
+if (!empty($search)) {
+    $search_param = "%{$search}%";
+    $query .= " AND (name LIKE ? OR description LIKE ? OR category LIKE ?)";
+}
+
+if (!empty($category_filter)) {
+    $query .= " AND category = ?";
+}
+
+$query .= " ORDER BY category, name";
+
+// Get available items with search/filter
+$stmt = null;
+if (!empty($search)) {
+    $stmt = $conn->prepare($query);
+    if (!empty($category_filter)) {
+        $stmt->bind_param("ssss", $search_param, $search_param, $search_param, $category_filter);
+    } else {
+        $stmt->bind_param("sss", $search_param, $search_param, $search_param);
+    }
+    $stmt->execute();
+    $items = $stmt->get_result();
+} elseif (!empty($category_filter)) {
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param("s", $category_filter);
+    $stmt->execute();
+    $items = $stmt->get_result();
+} else {
+    $items = $conn->query($query);
+}
+
+// Get all categories for filter
+$categories = $conn->query("SELECT DISTINCT category FROM items WHERE is_available = 1 AND category IS NOT NULL AND category != '' ORDER BY category");
+?>
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap;">
+        <h2 class="card-title">Menu</h2>
+        <a href="cart.php" class="btn btn-primary">View Cart (<?php echo isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0; ?>)</a>
+    </div>
+    
+    <?php echo $message; ?>
+    
+    <!-- Search and Filter Form -->
+    <form method="GET" action="" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+        <div style="flex: 1; min-width: 200px;">
+            <input type="text" name="search" placeholder="Search food items..." value="<?php echo htmlspecialchars($search); ?>" style="width: 100%; padding: 10px;">
+        </div>
+        <div>
+            <select name="category" style="padding: 10px;">
+                <option value="">All Categories</option>
+                <?php while ($cat = $categories->fetch_assoc()): ?>
+                    <option value="<?php echo htmlspecialchars($cat['category']); ?>" <?php echo $category_filter == $cat['category'] ? 'selected' : ''; ?>>
+                        <?php echo htmlspecialchars($cat['category']); ?>
+                    </option>
+                <?php endwhile; ?>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Search</button>
+        <?php if (!empty($search) || !empty($category_filter)): ?>
+            <a href="menu.php" class="btn" style="background-color: #95a5a6; color: white;">Clear</a>
+        <?php endif; ?>
+    </form>
+    
+    <?php if (!empty($search) || !empty($category_filter)): ?>
+        <p style="margin-bottom: 20px; color: #7f8c8d;">
+            <?php 
+            $result_count = $items->num_rows;
+            echo "Found {$result_count} item(s)";
+            if (!empty($search)) echo " matching '{$search}'";
+            if (!empty($category_filter)) echo " in category '{$category_filter}'";
+            ?>
+        </p>
+    <?php endif; ?>
+    
+    <div class="grid">
+        <?php if ($items->num_rows > 0): ?>
+            <?php while ($item = $items->fetch_assoc()): ?>
+                <div class="item-card">
+                    <h3><?php echo htmlspecialchars($item['name']); ?></h3>
+                    <p class="category"><?php echo htmlspecialchars($item['category']); ?></p>
+                    <p class="price">৳<?php echo number_format($item['price'], 2); ?></p>
+                    <p style="margin: 10px 0; font-size: 0.9rem; color: #7f8c8d;"><?php echo htmlspecialchars($item['description']); ?></p>
+                    <form method="POST" action="">
+                        <input type="hidden" name="item_id" value="<?php echo $item['id']; ?>">
+                        <div class="quantity-input" style="justify-content: center;">
+                            <label>Quantity: </label>
+                            <input type="number" name="quantity" value="1" min="1" style="width: 60px;">
+                        </div>
+                        <button type="submit" name="add_to_cart" class="btn btn-success" style="width: 100%;">Add to Cart</button>
+                    </form>
+                </div>
+            <?php endwhile; ?>
+        <?php else: ?>
+            <p style="grid-column: 1 / -1; text-align: center; padding: 40px; color: #7f8c8d;">
+                <?php if (!empty($search) || !empty($category_filter)): ?>
+                    No items found matching your search criteria. <a href="menu.php">View all items</a>
+                <?php else: ?>
+                    No items available at the moment.
+                <?php endif; ?>
+            </p>
+        <?php endif; ?>
+    </div>
+</div>
+
+<?php
+if ($stmt) $stmt->close();
+$conn->close();
+require_once '../includes/footer.php';
+?>
+
