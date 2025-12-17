@@ -1,0 +1,92 @@
+<?php
+$pageTitle = 'Edit Item';
+require_once '../includes/header.php';
+require_once '../config/database.php';
+requireAdmin();
+
+$conn = getDBConnection();
+$message = '';
+
+if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
+    header('Location: items.php');
+    exit();
+}
+
+$id = $_GET['id'];
+
+// Get item data
+$stmt = $conn->prepare("SELECT * FROM items WHERE id = ?");
+$stmt->bind_param("i", $id);
+$stmt->execute();
+$result = $stmt->get_result();
+$item = $result->fetch_assoc();
+
+if (!$item) {
+    header('Location: items.php');
+    exit();
+}
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $name = $_POST['name'] ?? '';
+    $description = $_POST['description'] ?? '';
+    $price = $_POST['price'] ?? 0;
+    $category = $_POST['category'] ?? '';
+    $is_available = isset($_POST['is_available']) ? 1 : 0;
+    
+    if (empty($name) || empty($price)) {
+        $message = '<div class="alert alert-error">Name and price are required.</div>';
+    } else {
+        $stmt = $conn->prepare("UPDATE items SET name = ?, description = ?, price = ?, category = ?, is_available = ? WHERE id = ?");
+        $stmt->bind_param("ssdsii", $name, $description, $price, $category, $is_available, $id);
+        
+        if ($stmt->execute()) {
+            header('Location: items.php?success=1');
+            exit();
+        } else {
+            $message = '<div class="alert alert-error">Error updating item.</div>';
+        }
+        $stmt->close();
+    }
+}
+?>
+<div class="form-container">
+    <h2>Edit Item</h2>
+    <?php echo $message; ?>
+    
+    <form method="POST" action="">
+        <div class="form-group">
+            <label for="name">Item Name *</label>
+            <input type="text" id="name" name="name" value="<?php echo htmlspecialchars($item['name']); ?>" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description"><?php echo htmlspecialchars($item['description']); ?></textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="category">Category</label>
+            <input type="text" id="category" name="category" value="<?php echo htmlspecialchars($item['category']); ?>" placeholder="e.g., Coffee, Food, Dessert">
+        </div>
+        
+        <div class="form-group">
+            <label for="price">Price (৳) *</label>
+            <input type="number" id="price" name="price" step="0.01" min="0" value="<?php echo $item['price']; ?>" required>
+        </div>
+        
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="is_available" <?php echo $item['is_available'] ? 'checked' : ''; ?>> Available
+            </label>
+        </div>
+        
+        <button type="submit" class="btn btn-primary">Update Item</button>
+        <a href="items.php" class="btn" style="background-color: #95a5a6; color: white;">Cancel</a>
+    </form>
+</div>
+
+<?php
+$conn->close();
+require_once '../includes/footer.php';
+?>
+
