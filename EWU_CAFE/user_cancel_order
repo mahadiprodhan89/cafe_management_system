@@ -1,0 +1,50 @@
+<?php
+require_once '../config/session.php';
+require_once '../config/database.php';
+requireLogin();
+
+$conn = getDBConnection();
+$user_id = $_SESSION['user_id'];
+
+if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
+    header('Location: my_orders.php');
+    exit();
+}
+
+$order_id = $_GET['id'];
+
+// Get order details and verify it belongs to the user
+$stmt = $conn->prepare("SELECT * FROM orders WHERE id = ? AND user_id = ?");
+$stmt->bind_param("ii", $order_id, $user_id);
+$stmt->execute();
+$result = $stmt->get_result();
+$order = $result->fetch_assoc();
+
+if (!$order) {
+    header('Location: my_orders.php');
+    exit();
+}
+
+// Only allow cancellation of pending or preparing orders
+if ($order['status'] == 'cancelled' || $order['status'] == 'completed') {
+    header('Location: view_order.php?id=' . $order_id . '&error=cannot_cancel');
+    exit();
+}
+
+// Cancel the order
+$status = 'cancelled';
+$update_stmt = $conn->prepare("UPDATE orders SET status = ? WHERE id = ? AND user_id = ?");
+$update_stmt->bind_param("sii", $status, $order_id, $user_id);
+
+if ($update_stmt->execute()) {
+    header('Location: my_orders.php?cancelled=1');
+} else {
+    header('Location: view_order.php?id=' . $order_id . '&error=cancel_failed');
+}
+
+$stmt->close();
+$update_stmt->close();
+$conn->close();
+exit();
+?>
+
