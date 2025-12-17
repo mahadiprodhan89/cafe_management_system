@@ -1,0 +1,88 @@
+<?php
+$pageTitle = 'User Dashboard';
+require_once '../includes/header.php';
+require_once '../config/database.php';
+requireLogin();
+
+$conn = getDBConnection();
+$user_id = $_SESSION['user_id'];
+
+// Get user statistics
+$totalOrders = $conn->query("SELECT COUNT(*) as count FROM orders WHERE user_id = $user_id")->fetch_assoc()['count'];
+$pendingOrders = $conn->query("SELECT COUNT(*) as count FROM orders WHERE user_id = $user_id AND status = 'pending'")->fetch_assoc()['count'];
+// Total spent includes all orders except cancelled ones
+$totalSpent = $conn->query("SELECT COALESCE(SUM(total_amount), 0) as total FROM orders WHERE user_id = $user_id AND status != 'cancelled'")->fetch_assoc()['total'];
+
+// Recent orders
+$recentOrders = $conn->prepare("
+    SELECT * FROM orders 
+    WHERE user_id = ? 
+    ORDER BY order_date DESC 
+    LIMIT 5
+");
+$recentOrders->bind_param("i", $user_id);
+$recentOrders->execute();
+$orders = $recentOrders->get_result();
+?>
+<div class="card">
+    <h2 class="card-title">Dashboard</h2>
+    <p>Welcome, <?php echo htmlspecialchars($_SESSION['full_name']); ?>!</p>
+    <?php if (isset($_GET['signup']) && $_GET['signup'] == 'success'): ?>
+        <div class="alert alert-success">Account created successfully! Welcome to EWU Cafe Management System.</div>
+    <?php endif; ?>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3><?php echo $totalOrders; ?></h3>
+        <p>Total Orders</p>
+    </div>
+    <div class="stat-card">
+        <h3><?php echo $pendingOrders; ?></h3>
+        <p>Pending Orders</p>
+    </div>
+    <div class="stat-card">
+        <h3>৳<?php echo number_format($totalSpent, 2); ?></h3>
+        <p>Total Order Value</p>
+    </div>
+</div>
+
+<div class="card">
+    <h2 class="card-title">Recent Orders</h2>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Order ID</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if ($orders->num_rows > 0): ?>
+                    <?php while ($order = $orders->fetch_assoc()): ?>
+                        <tr>
+                            <td>#<?php echo $order['id']; ?></td>
+                            <td>৳<?php echo number_format($order['total_amount'], 2); ?></td>
+                            <td><span style="padding: 5px 10px; border-radius: 4px; background-color: #f39c12; color: white;"><?php echo ucfirst($order['status']); ?></span></td>
+                            <td><?php echo date('Y-m-d H:i', strtotime($order['order_date'])); ?></td>
+                            <td><a href="view_order.php?id=<?php echo $order['id']; ?>" class="btn btn-primary">View</a></td>
+                        </tr>
+                    <?php endwhile; ?>
+                <?php else: ?>
+                    <tr>
+                        <td colspan="5" style="text-align: center;">No orders found. <a href="menu.php">Place your first order!</a></td>
+                    </tr>
+                <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<?php
+$conn->close();
+require_once '../includes/footer.php';
+?>
+
