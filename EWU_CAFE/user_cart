@@ -1,0 +1,132 @@
+<?php
+$pageTitle = 'Shopping Cart';
+require_once '../includes/header.php';
+require_once '../config/database.php';
+requireLogin();
+
+$conn = getDBConnection();
+$message = '';
+
+// Handle remove from cart
+if (isset($_GET['remove'])) {
+    $item_id = $_GET['remove'];
+    if (isset($_SESSION['cart'][$item_id])) {
+        unset($_SESSION['cart'][$item_id]);
+        $message = '<div class="alert alert-success">Item removed from cart!</div>';
+    }
+}
+
+// Handle update quantity
+if (isset($_POST['update_cart'])) {
+    foreach ($_POST['quantities'] as $item_id => $quantity) {
+        if (isset($_SESSION['cart'][$item_id])) {
+            if ($quantity > 0) {
+                $_SESSION['cart'][$item_id]['quantity'] = (int)$quantity;
+            } else {
+                unset($_SESSION['cart'][$item_id]);
+            }
+        }
+    }
+    $message = '<div class="alert alert-success">Cart updated!</div>';
+}
+
+// Handle place order
+if (isset($_POST['place_order'])) {
+    if (empty($_SESSION['cart'])) {
+        $message = '<div class="alert alert-error">Your cart is empty!</div>';
+    } else {
+        $user_id = $_SESSION['user_id'];
+        $total = 0;
+        
+        // Calculate total
+        foreach ($_SESSION['cart'] as $item) {
+            $total += $item['price'] * $item['quantity'];
+        }
+        
+        // Create order
+        $stmt = $conn->prepare("INSERT INTO orders (user_id, total_amount, status) VALUES (?, ?, 'pending')");
+        $stmt->bind_param("id", $user_id, $total);
+        $stmt->execute();
+        $order_id = $conn->insert_id;
+        $stmt->close();
+        
+        // Add order items
+        foreach ($_SESSION['cart'] as $item_id => $item) {
+            $stmt = $conn->prepare("INSERT INTO order_items (order_id, item_id, quantity, price) VALUES (?, ?, ?, ?)");
+            $stmt->bind_param("iiid", $order_id, $item_id, $item['quantity'], $item['price']);
+            $stmt->execute();
+            $stmt->close();
+        }
+        
+        // Clear cart
+        $_SESSION['cart'] = [];
+        
+        header('Location: my_orders.php?success=1');
+        exit();
+    }
+}
+
+$cart = $_SESSION['cart'] ?? [];
+$total = 0;
+foreach ($cart as $item) {
+    $total += $item['price'] * $item['quantity'];
+}
+?>
+<div class="card">
+    <h2 class="card-title">Shopping Cart</h2>
+    <?php echo $message; ?>
+    
+    <?php if (empty($cart)): ?>
+        <div class="alert alert-info">
+            <p>Your cart is empty. <a href="menu.php">Browse menu</a> to add items.</p>
+        </div>
+    <?php else: ?>
+        <form method="POST" action="">
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Price</th>
+                            <th>Quantity</th>
+                            <th>Subtotal</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($cart as $item_id => $item): ?>
+                            <tr>
+                                <td><?php echo htmlspecialchars($item['name']); ?></td>
+                                <td>৳<?php echo number_format($item['price'], 2); ?></td>
+                                <td>
+                                    <input type="number" name="quantities[<?php echo $item_id; ?>]" value="<?php echo $item['quantity']; ?>" min="1" style="width: 60px;">
+                                </td>
+                                <td>৳<?php echo number_format($item['price'] * $item['quantity'], 2); ?></td>
+                                <td><a href="?remove=<?php echo $item_id; ?>" class="btn btn-danger">Remove</a></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="3" style="text-align: right; font-weight: bold;">Total:</td>
+                            <td style="font-weight: bold; font-size: 1.2rem;">৳<?php echo number_format($total, 2); ?></td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            
+            <div style="margin-top: 20px;">
+                <button type="submit" name="update_cart" class="btn btn-warning">Update Cart</button>
+                <button type="submit" name="place_order" class="btn btn-success" style="float: right;">Place Order</button>
+                <a href="menu.php" class="btn btn-primary">Continue Shopping</a>
+            </div>
+        </form>
+    <?php endif; ?>
+</div>
+
+<?php
+$conn->close();
+require_once '../includes/footer.php';
+?>
+
